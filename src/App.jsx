@@ -157,7 +157,7 @@ function StepCode({ onFound }) {
 }
 
 /* ── Step 2: Plate verification ── */
-function StepPlate({ infraction, onConfirm }) {
+function StepPlate({ infraction, onConfirm, onReset }) {
   const [plate, setPlate] = useState("");
   const [error, setError] = useState("");
   const submit = () => {
@@ -190,6 +190,7 @@ function StepPlate({ infraction, onConfirm }) {
         </p>
         {error && <div style={S.error}>{error}</div>}
         <button onClick={submit} style={S.btnPrimary}>Accéder à mon avis →</button>
+        <button onClick={onReset} style={S.btnOutline}>← Retour</button>
       </div>
     </div>
   );
@@ -374,7 +375,7 @@ export default function PublicApp() {
     <div style={S.app}>
       <Header />
       {step==="code"   && <StepCode  onFound={handleFound} />}
-      {step==="plate"  && infraction && <StepPlate infraction={infraction} onConfirm={()=>setStep("result")} />}
+      {step==="plate"  && infraction && <StepPlate infraction={infraction} onConfirm={()=>setStep("result")} onReset={reset} />}
       {step==="blank"  && <StepBlank onReset={reset} />}
       {step==="result" && infraction && <StepResult infraction={infraction} onReset={reset} />}
     </div>
