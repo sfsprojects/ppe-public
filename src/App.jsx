@@ -357,7 +357,11 @@ function StepResult({ infraction, onReset }) {
 export default function PublicApp() {
   const [step, setStep]             = useState("code");
   const [infraction, setInfraction] = useState(null);
-  const reset = () => { setStep("code"); setInfraction(null); };
+  const reset = () => { setStep("code"); setInfraction(null); };const reset = () => {
+  window.history.replaceState({}, "", window.location.pathname);
+  setStep("code");
+  setInfraction(null);
+};
 
   const handleFound = (data) => {
     setInfraction(data);
