@@ -308,6 +308,45 @@ function StepResult({ infraction, onReset }) {
           </div>
         )}
 
+        {/* Messages envoyés + réponses */}
+        {!isCancelled && (() => {
+          const msgs = (infraction.messages || []).filter(m => m.message);
+          if (msgs.length === 0) return null;
+          return (
+            <div style={{ background:"white", border:"1px solid #e0dcd5", borderTop:"none" }}>
+              <div style={{ padding:"12px 22px 0", borderBottom:"1px solid #f0ede8" }}>
+                <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:0.6, color:"#6b7a99", marginBottom:10, fontFamily:FONT }}>
+                  Vos messages
+                </div>
+              </div>
+              {msgs.map((m, i) => (
+                <div key={m.id} style={{ padding:"12px 22px", borderBottom: i < msgs.length-1 ? "1px solid #f0ede8" : "none" }}>
+                  {/* Message du contrevenant */}
+                  <div style={{ marginBottom: m.reply ? 10 : 0 }}>
+                    <div style={{ fontSize:10, color:"#6b7a99", fontFamily:FONT, marginBottom:4 }}>
+                      {new Date(m.sent_at).toLocaleDateString("fr-CH", { day:"2-digit", month:"2-digit", year:"numeric", hour:"2-digit", minute:"2-digit" })}
+                    </div>
+                    <div style={{ padding:"10px 12px", background:"#faf9f7", borderRadius:6, border:"1px solid #e0dcd5", fontSize:12, color:"#1a1a2e", lineHeight:1.6, fontFamily:FONT }}>
+                      {m.message}
+                    </div>
+                  </div>
+                  {/* Réponse de l'administration (sans nom d'agent) */}
+                  {m.reply && (
+                    <div style={{ marginLeft:16 }}>
+                      <div style={{ fontSize:10, color:"#1d4ed8", fontFamily:FONT, marginBottom:4, fontWeight:700 }}>
+                        Réponse · {new Date(m.replied_at).toLocaleDateString("fr-CH", { day:"2-digit", month:"2-digit", year:"numeric", hour:"2-digit", minute:"2-digit" })}
+                      </div>
+                      <div style={{ padding:"10px 12px", background:"#eff6ff", borderRadius:6, border:"1px solid #bfdbfe", borderLeft:"3px solid #1d4ed8", fontSize:12, color:"#1a1a2e", lineHeight:1.6, fontFamily:FONT }}>
+                        {m.reply}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          );
+        })()}
+
         {/* Récidive notice */}
         {!isCancelled && (
           <div style={{ background:"#faf9f7", border:"1px solid #e0dcd5", borderTop:"none", padding:"12px 22px" }}>
