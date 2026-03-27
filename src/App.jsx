@@ -88,7 +88,6 @@ function StepCode({ onFound }) {
       await s.start({ facingMode:"environment" }, { fps:10, qrbox:{width:220,height:220} },
         async (decoded) => {
           stopScanner();
-          // Handle both plain code and full URL with ?code=
           let clean = decoded.trim().toUpperCase();
           const urlMatch = clean.match(/[?&]CODE=([A-Z0-9]{8})/);
           if (urlMatch) clean = urlMatch[1];
@@ -122,7 +121,6 @@ function StepCode({ onFound }) {
           </p>
         </div>
 
-        {/* Scanner */}
         {!scanning ? (
           <button onClick={startScanner} style={{ ...S.btnDark, marginBottom:16, display:"flex", alignItems:"center", justifyContent:"center", gap:8, fontSize:13 }}>
             📷 Scanner le QR code
@@ -230,9 +228,12 @@ function StepResult({ infraction, onReset }) {
 
   useEffect(() => {
     if (infraction.status === "active") {
-      supabase.from("infractions")
-        .update({ status:"viewed", viewed_at:new Date().toISOString() })
-        .eq("id", infraction.id);
+      (async () => {
+        const { error } = await supabase.from("infractions")
+          .update({ status:"viewed", viewed_at:new Date().toISOString() })
+          .eq("id", infraction.id);
+        if (error) console.error("viewed update error:", error);
+      })();
     }
   }, []);
 
@@ -357,11 +358,12 @@ function StepResult({ infraction, onReset }) {
 export default function PublicApp() {
   const [step, setStep]             = useState("code");
   const [infraction, setInfraction] = useState(null);
-  const reset = () => { setStep("code"); setInfraction(null); };const reset = () => {
-  window.history.replaceState({}, "", window.location.pathname);
-  setStep("code");
-  setInfraction(null);
-};
+
+  const reset = () => {
+    window.history.replaceState({}, "", window.location.pathname);
+    setStep("code");
+    setInfraction(null);
+  };
 
   const handleFound = (data) => {
     setInfraction(data);
