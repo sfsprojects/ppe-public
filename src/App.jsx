@@ -204,15 +204,15 @@ function StepPlate({ infraction, onConfirm, onReset }) {
   const lookupReply = async () => {
     if (!replyEmail.trim()) return;
     setReplyResult("loading");
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("messages")
       .select("*")
       .eq("infraction_id", infraction.id)
       .ilike("sender_email", replyEmail.trim())
       .order("sent_at", { ascending:false })
       .limit(1)
-      .single();
-    if (!data) { setReplyResult("notfound"); return; }
+      .maybeSingle();
+    if (error || !data) { setReplyResult("notfound"); return; }
     setReplyResult(data);
   };
 
