@@ -158,39 +158,196 @@ function StepCode({ onFound }) {
 
 /* ── Step 2: Plate verification ── */
 function StepPlate({ infraction, onConfirm, onReset }) {
-  const [plate, setPlate] = useState("");
-  const [error, setError] = useState("");
+  const [plate, setPlate]       = useState("");
+  const [error, setError]       = useState("");
+  const [attempts, setAttempts] = useState(0);
+  const [showContact, setShowContact]   = useState(false);
+  const [showReply, setShowReply]       = useState(false);
+  const [form, setForm]         = useState({ lastName:"", firstName:"", email:"", phone:"", message:"" });
+  const [formError, setFormError] = useState("");
+  const [sending, setSending]   = useState(false);
+  const [sent, setSent]         = useState(false);
+  // Consultation réponse par e-mail
+  const [replyEmail, setReplyEmail]   = useState("");
+  const [replyResult, setReplyResult] = useState(null); // null | "loading" | "notfound" | message object
+  const setF = (k,v) => setForm(f=>({...f,[k]:v}));
+
   const submit = () => {
     if (!plate.trim()) { setError("Veuillez saisir votre numéro de plaque."); return; }
     if (normalizePlate(plate)===normalizePlate(infraction.plate||"")) { setError(""); onConfirm(); }
-    else setError("Ce numéro de plaque ne correspond pas à cet avis. Vérifiez votre saisie.");
+    else {
+      const newAttempts = attempts + 1;
+      setAttempts(newAttempts);
+      setError(`Ce numéro de plaque ne correspond pas à cet avis. Vérifiez votre saisie.${newAttempts>=3?" Si votre plaque est correcte, utilisez le formulaire ci-dessous.":""}`);
+    }
   };
+
+  const submitContact = async () => {
+    if (!form.lastName.trim()||!form.firstName.trim()||!form.email.trim()||!form.phone.trim()||!form.message.trim()) {
+      setFormError("Tous les champs sont obligatoires."); return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) { setFormError("Adresse e-mail invalide."); return; }
+    setSending(true);
+    await supabase.from("messages").insert({
+      infraction_id:     infraction.id,
+      sender_last_name:  form.lastName.trim(),
+      sender_first_name: form.firstName.trim(),
+      sender_email:      form.email.trim(),
+      sender_phone:      form.phone.trim(),
+      plate:             "(plaque non vérifiée)",
+      message:           `[PLAQUE NON VÉRIFIÉE — ${attempts} tentative${attempts>1?"s":""}]\n\n${form.message.trim()}`,
+      read:              false,
+    });
+    setSending(false); setSent(true); setFormError("");
+  };
+
+  const lookupReply = async () => {
+    if (!replyEmail.trim()) return;
+    setReplyResult("loading");
+    const { data } = await supabase
+      .from("messages")
+      .select("*")
+      .eq("infraction_id", infraction.id)
+      .ilike("sender_email", replyEmail.trim())
+      .order("sent_at", { ascending:false })
+      .limit(1)
+      .single();
+    if (!data) { setReplyResult("notfound"); return; }
+    setReplyResult(data);
+  };
+
   return (
     <div style={S.page}>
       <div style={S.card}>
-        <div style={{ textAlign:"center", marginBottom:26 }}>
-          <div style={{ fontSize:36, marginBottom:8 }}>🔒</div>
-          <h1 style={{ fontSize:19, fontWeight:700, margin:"0 0 8px", fontFamily:FONT }}>Vérification</h1>
-          <p style={{ color:"#6b7a99", fontSize:12, margin:0, lineHeight:1.6, fontFamily:FONT }}>
-            Pour accéder aux détails, confirmez le numéro de plaque de votre véhicule.
-          </p>
-        </div>
-        <Field label="Numéro de plaque">
-          <input
-            style={{ ...S.input, fontSize:18, letterSpacing:3, textAlign:"center", textTransform:"uppercase", fontWeight:700 }}
-            value={plate}
-            onChange={e=>{ setPlate(e.target.value.toUpperCase()); setError(""); }}
-            placeholder="GE 123456"
-            onKeyDown={e=>e.key==="Enter"&&submit()}
-            autoFocus
-          />
-        </Field>
-        <p style={{ color:"#aaa", fontSize:11, marginTop:-6, marginBottom:10, textAlign:"center", fontFamily:FONT }}>
-          Les espaces sont acceptés — GE 123456 ou GE123456
-        </p>
-        {error && <div style={S.error}>{error}</div>}
-        <button onClick={submit} style={S.btnPrimary}>Accéder à mon avis →</button>
-        <button onClick={onReset} style={S.btnOutline}>← Retour</button>
+        {!showContact && !showReply ? (
+          <>
+            <div style={{ textAlign:"center", marginBottom:26 }}>
+              <div style={{ fontSize:36, marginBottom:8 }}>🔒</div>
+              <h1 style={{ fontSize:19, fontWeight:700, margin:"0 0 8px", fontFamily:FONT }}>Vérification</h1>
+              <p style={{ color:"#6b7a99", fontSize:12, margin:0, lineHeight:1.6, fontFamily:FONT }}>
+                Pour accéder aux détails, confirmez le numéro de plaque de votre véhicule.
+              </p>
+            </div>
+            <Field label="Numéro de plaque">
+              <input
+                style={{ ...S.input, fontSize:18, letterSpacing:3, textAlign:"center", textTransform:"uppercase", fontWeight:700 }}
+                value={plate}
+                onChange={e=>{ setPlate(e.target.value.toUpperCase()); setError(""); }}
+                placeholder="GE 123456"
+                onKeyDown={e=>e.key==="Enter"&&submit()}
+                autoFocus
+              />
+            </Field>
+            <p style={{ color:"#aaa", fontSize:11, marginTop:-6, marginBottom:10, textAlign:"center", fontFamily:FONT }}>
+              Les espaces sont acceptés — GE 123456 ou GE123456
+            </p>
+            {error && <div style={S.error}>{error}</div>}
+            <button onClick={submit} style={S.btnPrimary}>Accéder à mon avis →</button>
+            {attempts >= 3 && (
+              <button onClick={()=>setShowContact(true)} style={{ ...S.btnOutline, marginTop:10, fontSize:12, color:"#6b7a99" }}>
+                ✉ Ma plaque ne correspond pas — Contacter
+              </button>
+            )}
+            {/* Lien permanent consultation réponse */}
+            <div style={{ marginTop:18, paddingTop:14, borderTop:"1px solid #e8e5e0", textAlign:"center" }}>
+              <button onClick={()=>setShowReply(true)} style={{ background:"none", border:"none", cursor:"pointer", fontSize:12, color:"#6b7a99", fontFamily:FONT, textDecoration:"underline", padding:0 }}>
+                Consulter la réponse à un message envoyé
+              </button>
+            </div>
+            <button onClick={onReset} style={S.btnOutline}>← Retour</button>
+          </>
+
+        ) : showReply ? (
+          <>
+            <div style={{ marginBottom:20 }}>
+              <div style={{ fontSize:14, fontWeight:700, marginBottom:6, fontFamily:FONT }}>Consulter la réponse à votre message</div>
+              <div style={{ fontSize:12, color:"#6b7a99", lineHeight:1.6, fontFamily:FONT }}>
+                Saisissez l'adresse e-mail utilisée lors de votre message pour retrouver la réponse.
+              </div>
+            </div>
+            <Field label="Votre adresse e-mail">
+              <input style={S.input} type="email" value={replyEmail}
+                onChange={e=>{ setReplyEmail(e.target.value); setReplyResult(null); }}
+                placeholder="jean@example.com"
+                onKeyDown={e=>e.key==="Enter"&&lookupReply()}
+                autoFocus />
+            </Field>
+            <button onClick={lookupReply} disabled={!replyEmail.trim()||replyResult==="loading"}
+              style={{ ...S.btnPrimary, opacity:(!replyEmail.trim()||replyResult==="loading")?0.5:1 }}>
+              {replyResult==="loading"?"Recherche…":"Rechercher →"}
+            </button>
+
+            {replyResult==="notfound"&&(
+              <div style={{ marginTop:12, padding:"10px 13px", background:"#fff0f2", borderRadius:6, color:"#c8102e", fontSize:12, border:"1px solid #ffd0d7", fontFamily:FONT }}>
+                Aucun message trouvé pour cet e-mail sur cet avis.
+              </div>
+            )}
+            {replyResult&&replyResult!=="loading"&&replyResult!=="notfound"&&(
+              <div style={{ marginTop:14 }}>
+                {/* Message envoyé */}
+                <div style={{ marginBottom:10 }}>
+                  <div style={{ fontSize:10, color:"#6b7a99", fontFamily:FONT, marginBottom:4 }}>
+                    Votre message — {new Date(replyResult.sent_at).toLocaleDateString("fr-CH", { day:"2-digit", month:"2-digit", year:"numeric", hour:"2-digit", minute:"2-digit" })}
+                  </div>
+                  <div style={{ padding:"10px 12px", background:"#faf9f7", borderRadius:6, border:"1px solid #e0dcd5", fontSize:12, color:"#1a1a2e", lineHeight:1.6, fontFamily:FONT }}>
+                    {replyResult.message.replace(/^\[PLAQUE NON VÉRIFIÉE[^\]]*\]\n\n/,"")}
+                  </div>
+                </div>
+                {/* Réponse */}
+                {replyResult.reply ? (
+                  <div>
+                    <div style={{ fontSize:10, color:"#1d4ed8", fontFamily:FONT, fontWeight:700, marginBottom:4 }}>
+                      Réponse — {new Date(replyResult.replied_at).toLocaleDateString("fr-CH", { day:"2-digit", month:"2-digit", year:"numeric", hour:"2-digit", minute:"2-digit" })}
+                    </div>
+                    <div style={{ padding:"10px 12px", background:"#eff6ff", borderRadius:6, border:"1px solid #bfdbfe", borderLeft:"3px solid #1d4ed8", fontSize:12, color:"#1a1a2e", lineHeight:1.6, fontFamily:FONT }}>
+                      {replyResult.reply}
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ padding:"10px 12px", background:"#fffbeb", borderRadius:6, border:"1px solid #fde68a", fontSize:12, color:"#92400e", fontFamily:FONT }}>
+                    ⏳ Votre message n'a pas encore reçu de réponse. Revenez consulter cette page ultérieurement.
+                  </div>
+                )}
+              </div>
+            )}
+            <button onClick={()=>{ setShowReply(false); setReplyEmail(""); setReplyResult(null); }} style={{ ...S.btnOutline, marginTop:14 }}>← Retour</button>
+          </>
+
+        ) : sent ? (
+          <div style={{ textAlign:"center", padding:"12px 0" }}>
+            <div style={{ fontSize:30, marginBottom:10 }}>✓</div>
+            <div style={{ fontWeight:700, fontSize:14, marginBottom:10, fontFamily:FONT }}>Message transmis</div>
+            <div style={{ fontSize:12, color:"#444", lineHeight:1.8, fontFamily:FONT }}>
+              Votre message a bien été transmis. Nous vérifierons votre dossier et vous contacterons si nécessaire.
+            </div>
+            <div style={{ marginTop:14, padding:"12px 14px", background:"#fffbeb", border:"1px solid #fde68a", borderRadius:6, fontSize:12, color:"#92400e", lineHeight:1.7, fontFamily:FONT, textAlign:"left" }}>
+              📌 <strong>Conservez le QR code</strong> figurant sur votre avis. Vous pourrez revenir sur cette page à tout moment pour consulter la réponse à votre message en cliquant sur « Consulter la réponse à un message envoyé ».
+            </div>
+            <button onClick={onReset} style={{ ...S.btnPrimary, marginTop:20 }}>← Retour à l'accueil</button>
+          </div>
+
+        ) : (
+          <>
+            <div style={{ marginBottom:20 }}>
+              <div style={{ fontSize:14, fontWeight:700, marginBottom:6, fontFamily:FONT }}>Plaque incorrecte — Formulaire de contact</div>
+              <div style={{ fontSize:12, color:"#6b7a99", lineHeight:1.6, fontFamily:FONT }}>
+                Si vous pensez qu'il y a une erreur sur votre avis, décrivez votre situation. Votre message sera transmis pour vérification.
+              </div>
+            </div>
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
+              <Field label="Nom *"><input style={S.input} value={form.lastName} onChange={e=>{setF("lastName",e.target.value);setFormError("");}} placeholder="Dupont" /></Field>
+              <Field label="Prénom *"><input style={S.input} value={form.firstName} onChange={e=>{setF("firstName",e.target.value);setFormError("");}} placeholder="Jean" /></Field>
+            </div>
+            <Field label="E-mail *"><input style={S.input} type="email" value={form.email} onChange={e=>{setF("email",e.target.value);setFormError("");}} placeholder="jean@example.com" /></Field>
+            <Field label="Téléphone *"><input style={S.input} type="tel" value={form.phone} onChange={e=>{setF("phone",e.target.value);setFormError("");}} placeholder="079 123 45 67" /></Field>
+            <Field label="Message *"><textarea style={S.textarea} value={form.message} onChange={e=>{setF("message",e.target.value);setFormError("");}} placeholder="Décrivez votre situation et indiquez votre plaque réelle…" /></Field>
+            {formError && <div style={S.error}>{formError}</div>}
+            <div style={{ display:"flex", gap:10, marginTop:6 }}>
+              <button onClick={()=>setShowContact(false)} style={{ ...S.btnOutline, marginTop:0, flex:1 }}>← Retour</button>
+              <button onClick={submitContact} disabled={sending} style={{ ...S.btnPrimary, marginTop:0, flex:2, opacity:sending?0.6:1 }}>{sending?"Envoi…":"Envoyer"}</button>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
