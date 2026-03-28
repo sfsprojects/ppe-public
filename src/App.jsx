@@ -31,17 +31,7 @@ const S = {
   iVal:    { fontSize:12, fontWeight:700, textAlign:"right", fontFamily:FONT },
 };
 
-function Header() {
-  return (
-    <div style={S.header}>
-      <div style={S.logoIcon}>P</div>
-      <div>
-        <div style={S.logoText}>Infraction de stationnement</div>
-        <span style={S.logoSub}>Consultation en ligne</span>
-      </div>
-    </div>
-  );
-}
+function Header() { return null; }
 
 function InfoRow({ label, value }) {
   return (
