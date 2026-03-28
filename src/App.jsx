@@ -161,16 +161,16 @@ function StepPlate({ infraction, onConfirm, onReset }) {
   const [plate, setPlate]       = useState("");
   const [error, setError]       = useState("");
   const [attempts, setAttempts] = useState(0);
-  const [showContact, setShowContact]   = useState(false);
-  const [showReply, setShowReply]       = useState(false);
+  const [showContact, setShowContact] = useState(false);
   const [form, setForm]         = useState({ lastName:"", firstName:"", email:"", phone:"", message:"" });
   const [formError, setFormError] = useState("");
   const [sending, setSending]   = useState(false);
   const [sent, setSent]         = useState(false);
-  // Consultation réponse par e-mail
-  const [replyEmail, setReplyEmail]   = useState("");
-  const [replyResult, setReplyResult] = useState(null); // null | "loading" | "notfound" | message object
   const setF = (k,v) => setForm(f=>({...f,[k]:v}));
+
+  // Messages envoyés sans vérification de plaque (tagués "(plaque non vérifiée)")
+  const unverifiedMsgs = (infraction.messages || []).filter(m => m.plate === "(plaque non vérifiée)" && m.message);
+  const unverifiedWithReply = unverifiedMsgs.filter(m => m.reply);
 
   const submit = () => {
     if (!plate.trim()) { setError("Veuillez saisir votre numéro de plaque."); return; }
@@ -201,25 +201,10 @@ function StepPlate({ infraction, onConfirm, onReset }) {
     setSending(false); setSent(true); setFormError("");
   };
 
-  const lookupReply = async () => {
-    if (!replyEmail.trim()) return;
-    setReplyResult("loading");
-    const { data, error } = await supabase
-      .from("messages")
-      .select("*")
-      .eq("infraction_id", infraction.id)
-      .ilike("sender_email", replyEmail.trim())
-      .order("sent_at", { ascending:false })
-      .limit(1)
-      .maybeSingle();
-    if (error || !data) { setReplyResult("notfound"); return; }
-    setReplyResult(data);
-  };
-
   return (
     <div style={S.page}>
       <div style={S.card}>
-        {!showContact && !showReply ? (
+        {!showContact ? (
           <>
             <div style={{ textAlign:"center", marginBottom:26 }}>
               <div style={{ fontSize:36, marginBottom:8 }}>🔒</div>
@@ -248,69 +233,33 @@ function StepPlate({ infraction, onConfirm, onReset }) {
                 ✉ Ma plaque ne correspond pas — Contacter
               </button>
             )}
-            {/* Lien permanent consultation réponse */}
-            <div style={{ marginTop:18, paddingTop:14, borderTop:"1px solid #e8e5e0", textAlign:"center" }}>
-              <button onClick={()=>setShowReply(true)} style={{ background:"none", border:"none", cursor:"pointer", fontSize:12, color:"#6b7a99", fontFamily:FONT, textDecoration:"underline", padding:0 }}>
-                Consulter la réponse à un message envoyé
-              </button>
-            </div>
-            <button onClick={onReset} style={S.btnOutline}>← Retour</button>
-          </>
-
-        ) : showReply ? (
-          <>
-            <div style={{ marginBottom:20 }}>
-              <div style={{ fontSize:14, fontWeight:700, marginBottom:6, fontFamily:FONT }}>Consulter la réponse à votre message</div>
-              <div style={{ fontSize:12, color:"#6b7a99", lineHeight:1.6, fontFamily:FONT }}>
-                Saisissez l'adresse e-mail utilisée lors de votre message pour retrouver la réponse.
-              </div>
-            </div>
-            <Field label="Votre adresse e-mail">
-              <input style={S.input} type="email" value={replyEmail}
-                onChange={e=>{ setReplyEmail(e.target.value); setReplyResult(null); }}
-                placeholder="jean@example.com"
-                onKeyDown={e=>e.key==="Enter"&&lookupReply()}
-                autoFocus />
-            </Field>
-            <button onClick={lookupReply} disabled={!replyEmail.trim()||replyResult==="loading"}
-              style={{ ...S.btnPrimary, opacity:(!replyEmail.trim()||replyResult==="loading")?0.5:1 }}>
-              {replyResult==="loading"?"Recherche…":"Rechercher →"}
-            </button>
-
-            {replyResult==="notfound"&&(
-              <div style={{ marginTop:12, padding:"10px 13px", background:"#fff0f2", borderRadius:6, color:"#c8102e", fontSize:12, border:"1px solid #ffd0d7", fontFamily:FONT }}>
-                Aucun message trouvé pour cet e-mail sur cet avis.
-              </div>
-            )}
-            {replyResult&&replyResult!=="loading"&&replyResult!=="notfound"&&(
-              <div style={{ marginTop:14 }}>
-                {/* Message envoyé */}
-                <div style={{ marginBottom:10 }}>
-                  <div style={{ fontSize:10, color:"#6b7a99", fontFamily:FONT, marginBottom:4 }}>
-                    Votre message — {new Date(replyResult.sent_at).toLocaleDateString("fr-CH", { day:"2-digit", month:"2-digit", year:"numeric", hour:"2-digit", minute:"2-digit" })}
-                  </div>
-                  <div style={{ padding:"10px 12px", background:"#faf9f7", borderRadius:6, border:"1px solid #e0dcd5", fontSize:12, color:"#1a1a2e", lineHeight:1.6, fontFamily:FONT }}>
-                    {replyResult.message.replace(/^\[PLAQUE NON VÉRIFIÉE[^\]]*\]\n\n/,"")}
-                  </div>
-                </div>
-                {/* Réponse */}
-                {replyResult.reply ? (
-                  <div>
-                    <div style={{ fontSize:10, color:"#1d4ed8", fontFamily:FONT, fontWeight:700, marginBottom:4 }}>
-                      Réponse — {new Date(replyResult.replied_at).toLocaleDateString("fr-CH", { day:"2-digit", month:"2-digit", year:"numeric", hour:"2-digit", minute:"2-digit" })}
+            {/* Réponses aux messages envoyés sans vérification de plaque */}
+            {unverifiedWithReply.length > 0 && (
+              <div style={{ marginTop:18, paddingTop:14, borderTop:"1px solid #e8e5e0" }}>
+                <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:0.8, color:"#6b7a99", marginBottom:12, fontFamily:FONT }}>Réponse à votre message</div>
+                {unverifiedWithReply.map(m => (
+                  <div key={m.id} style={{ marginBottom:10 }}>
+                    <div style={{ padding:"9px 12px", background:"#faf9f7", borderRadius:6, border:"1px solid #e0dcd5", fontSize:11, color:"#6b7a99", lineHeight:1.6, fontFamily:FONT, marginBottom:6 }}>
+                      {m.message.replace(/^\[PLAQUE NON VÉRIFIÉE[^\]]*\]\s*/,"")}
                     </div>
                     <div style={{ padding:"10px 12px", background:"#eff6ff", borderRadius:6, border:"1px solid #bfdbfe", borderLeft:"3px solid #1d4ed8", fontSize:12, color:"#1a1a2e", lineHeight:1.6, fontFamily:FONT }}>
-                      {replyResult.reply}
+                      <div style={{ fontSize:10, color:"#1d4ed8", fontWeight:700, marginBottom:4, fontFamily:FONT }}>
+                        Réponse · {new Date(m.replied_at).toLocaleDateString("fr-CH", { day:"2-digit", month:"2-digit", year:"numeric", hour:"2-digit", minute:"2-digit" })}
+                      </div>
+                      {m.reply}
                     </div>
                   </div>
-                ) : (
-                  <div style={{ padding:"10px 12px", background:"#fffbeb", borderRadius:6, border:"1px solid #fde68a", fontSize:12, color:"#92400e", fontFamily:FONT }}>
-                    ⏳ Votre message n'a pas encore reçu de réponse. Revenez consulter cette page ultérieurement.
-                  </div>
-                )}
+                ))}
               </div>
             )}
-            <button onClick={()=>{ setShowReply(false); setReplyEmail(""); setReplyResult(null); }} style={{ ...S.btnOutline, marginTop:14 }}>← Retour</button>
+            {unverifiedMsgs.length > 0 && unverifiedWithReply.length === 0 && (
+              <div style={{ marginTop:18, paddingTop:14, borderTop:"1px solid #e8e5e0" }}>
+                <div style={{ padding:"10px 12px", background:"#fffbeb", borderRadius:6, border:"1px solid #fde68a", fontSize:12, color:"#92400e", fontFamily:FONT }}>
+                  ⏳ Votre message a été transmis. Revenez sur cette page pour consulter la réponse.
+                </div>
+              </div>
+            )}
+            <button onClick={onReset} style={S.btnOutline}>← Retour</button>
           </>
 
         ) : sent ? (
@@ -321,9 +270,9 @@ function StepPlate({ infraction, onConfirm, onReset }) {
               Votre message a bien été transmis. Nous vérifierons votre dossier et vous contacterons si nécessaire.
             </div>
             <div style={{ marginTop:14, padding:"12px 14px", background:"#fffbeb", border:"1px solid #fde68a", borderRadius:6, fontSize:12, color:"#92400e", lineHeight:1.7, fontFamily:FONT, textAlign:"left" }}>
-              📌 <strong>Conservez le QR code</strong> figurant sur votre avis. Vous pourrez revenir sur cette page à tout moment pour consulter la réponse à votre message en cliquant sur « Consulter la réponse à un message envoyé ».
+              📌 <strong>Conservez le QR code</strong> figurant sur votre avis. Revenez sur cette page pour consulter la réponse à votre message.
             </div>
-            <button onClick={onReset} style={{ ...S.btnPrimary, marginTop:20 }}>← Retour à l'accueil</button>
+            <button onClick={()=>{ setSent(false); setShowContact(false); }} style={{ ...S.btnPrimary, marginTop:20 }}>← Retour à la vérification</button>
           </div>
 
         ) : (
@@ -373,7 +322,8 @@ function StepBlank({ onReset }) {
 }
 
 /* ── Step 3B: Result ── */
-function StepResult({ infraction, onReset }) {
+function StepResult({ infraction: initialInfraction, onReset }) {
+  const [infraction, setInfraction] = useState(initialInfraction);
   const [showContact, setShowContact] = useState(false);
   const [form, setForm]               = useState({ lastName:"", firstName:"", email:"", phone:"", message:"" });
   const [sent, setSent]               = useState(false);
@@ -385,12 +335,18 @@ function StepResult({ infraction, onReset }) {
   const photos      = infraction.photos || [];
 
   useEffect(() => {
-    if (infraction.status === "active") {
+    // Re-fetch pour avoir les messages et réponses à jour
+    (async () => {
+      const { data } = await supabase
+        .from("infractions").select("*, messages(*)").eq("id", initialInfraction.id).single();
+      if (data) setInfraction(data);
+    })();
+    // Marquer comme consulté
+    if (initialInfraction.status === "active") {
       (async () => {
-        const { error } = await supabase.from("infractions")
+        await supabase.from("infractions")
           .update({ status:"viewed", viewed_at:new Date().toISOString() })
-          .eq("id", infraction.id);
-        if (error) console.error("viewed update error:", error);
+          .eq("id", initialInfraction.id);
       })();
     }
   }, []);
